@@ -1,5 +1,5 @@
 
-ckage main
+package main
 
 import (
 	"flag"

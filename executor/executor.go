@@ -6,6 +6,8 @@ import (
 	exec "github.com/mesos/mesos-go/executor"
 	mesos "github.com/mesos/mesos-go/mesosproto"
 	log "github.com/golang/glog"
+	exe "os/exec"
+	"os"
 )
 
 type exampleExecutor struct {
@@ -42,9 +44,16 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 
 	exec.tasksLaunched++
 	log.Info("Total tasks launched ", exec.tasksLaunched)
-	//
-	// this is where one would perform the requested task
-	//
+
+	log.Info("Executing drone-agent")
+	droneCmd := exe.Command("drone-agent","-addr=http://localhost:8000","-token=1")
+	droneCmd.Stdout = os.Stdout
+	droneCmd.Stderr = os.Stderr
+	err = droneCmd.Run()
+	if err != nil {
+		panic(err)
+	}
+	log.Info("Completed drone-agent")
 
 	// finish task
 	log.Info("Finishing task", taskInfo.GetName())

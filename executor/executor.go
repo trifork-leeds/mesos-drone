@@ -8,6 +8,7 @@ import (
 	"fmt"
 	exe "os/exec"
 	"os"
+	"strings"
 )
 
 type exampleExecutor struct {
@@ -32,6 +33,14 @@ func (exec *exampleExecutor) Disconnected(exec.ExecutorDriver) {
 
 func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *mesos.TaskInfo) {
 	fmt.Println("Launching task", taskInfo.GetName(), "with command", taskInfo.Command.GetValue())
+	data := string(taskInfo.Data)
+	fmt.Println("Custom data: ", data)
+
+	// TODO: This is a really crappy way of passing arguments!
+	commands := strings.Split(data, " ")
+
+	// TODO: This will crash if there are not two arguments!
+	fmt.Println("Commands: ", commands[0], commands[1])
 
 	runStatus := &mesos.TaskStatus{
 		TaskId: taskInfo.GetTaskId(),
@@ -46,15 +55,13 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 	fmt.Println("Total tasks launched ", exec.tasksLaunched)
 
 	fmt.Println("Executing drone-agent")
-	droneCmd := exe.Command("drone-agent","-addr=http://localhost:8000","-token=1")
+	droneCmd := exe.Command("drone-agent",commands[0], commands[1])
 	droneCmd.Stdout = os.Stdout
 	droneCmd.Stderr = os.Stderr
 	err = droneCmd.Run()
 	if err != nil {
 		panic(err)
 	}
-
-
 	fmt.Println("Completed drone-agent")
 
 	// finish task

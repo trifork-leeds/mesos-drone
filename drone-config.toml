@@ -1,0 +1,38 @@
+[server]
+addr = ":88"
+cert = ""
+key = ""
+
+[session]
+secret = ""
+expires = 0
+
+[database]
+driver = "sqlite3"
+path = "/etc/drone/drone.db"
+
+[docker]
+cert = ""
+key = ""
+nodes = [
+  "unix:///var/run/docker.sock",
+  "unix:///var/run/docker.sock"
+]
+
+[service]
+name = "github"
+base = "https://github.com"
+orgs = []
+open = false
+private_mode = false
+skip_verify = true
+
+[service.oauth]
+client = "332f33e31d95a6dcea3f"
+secret = "d141f029013cd25a0916ca98ad9c35565859e480"
+authorize = "https://github.com/login/oauth/authorize"
+access_token = "https://github.com/login/oauth/access_token"
+request_token = ""
+
+[agents]
+secret = ""

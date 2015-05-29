@@ -1,5 +1,5 @@
 [server]
-addr = ":88"
+addr = ":80"
 cert = ""
 key = ""
 

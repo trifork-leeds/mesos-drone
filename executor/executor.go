@@ -46,7 +46,7 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 	log.Info("Total tasks launched ", exec.tasksLaunched)
 
 	log.Info("Executing drone-agent")
-	droneCmd := exe.Command("drone-agent","-addr=http://localhost:8000","-token=1")
+	droneCmd := exe.Command("drone-agent","-addr=http://172.31.17.35:80","-token=1")
 	droneCmd.Stdout = os.Stdout
 	droneCmd.Stderr = os.Stderr
 	err = droneCmd.Run()

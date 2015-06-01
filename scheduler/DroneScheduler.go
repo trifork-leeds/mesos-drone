@@ -250,7 +250,7 @@ func parseIP(address string) net.IP {
 
 func main() {
 
-	cmd := exec.Command("/bin/sh", "-c","sudo /home/vagrant/go/src/github.com/drone/drone/bin/drone --config=drone-config.toml &")
+	cmd := exec.Command("/bin/sh", "-c","sudo /home/ubuntu/go/src/github.com/drone/drone/bin/drone --config=drone-config.toml &")
 	err := cmd.Run()
 	if err != nil {
 		panic(err)

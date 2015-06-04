@@ -295,7 +295,7 @@ func parseIP(address string) net.IP {
 
 func getQueue(sched *ExampleScheduler)([]*queue.Work) {
 
-	uri := "http://" + *droneServerIP "/api/queue/get?token=1"
+	uri := "http://" + *droneServerIP + "/api/queue/get?token=1"
 	response, err := http.Get(uri)
 	if err != nil {
 		panic(err)

@@ -2,7 +2,9 @@
 Initial work on an Apache Mesos framework for Drone Ci
 
 # Notes
-## Building scheduler/executor example
+
+The drone Configuration file `config.toml` must be inside `go/src/github.com/mesos-drone/`.
+## Building scheduler/executor example 
 ```
 cd to go/src/github.com/mesos-drone/
 go build -tags=drone-sched -o drone-scheduler scheduler/DroneScheduler.go

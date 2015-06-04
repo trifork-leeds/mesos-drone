@@ -1,4 +1,3 @@
-
 package main
 
 import (
@@ -8,6 +7,7 @@ import (
 	log "github.com/golang/glog"
 	exe "os/exec"
 	"os"
+	"strings"
 )
 
 type exampleExecutor struct {
@@ -46,7 +46,10 @@ func (exec *exampleExecutor) LaunchTask(driver exec.ExecutorDriver, taskInfo *me
 	log.Info("Total tasks launched ", exec.tasksLaunched)
 
 	log.Info("Executing drone-agent")
-	droneCmd := exe.Command("drone-agent","-addr=http://172.31.17.35:80","-token=1")
+	s := string(taskInfo.Data)
+log.Info("Received data ", s)
+	split := strings.Split(s," ")
+	droneCmd := exe.Command("drone-agent",split[0],split[1])
 	droneCmd.Stdout = os.Stdout
 	droneCmd.Stderr = os.Stderr
 	err = droneCmd.Run()
@@ -109,3 +112,4 @@ func main() {
 	log.Info("Executor process has started and running.")
 	driver.Join()
 }
+

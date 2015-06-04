@@ -57,7 +57,7 @@ var (
 	executorPath        = flag.String("executor", "./example_executor", "Path to test executor")
 	mesosAuthPrincipal  = flag.String("mesos_authentication_principal", "", "Mesos authentication principal.")
 	mesosAuthSecretFile = flag.String("mesos_authentication_secret_file", "", "Mesos authentication secret file.")
-	droneServerIP		= flag.String("droneip","-addr=127.0.0.1:80","IP address of the drone server")
+	droneServerIP		= flag.String("droneip","127.0.0.1:80","IP address of the drone server")
 	launchedTasks = make(map[string](interface{}))
 )
 
@@ -133,7 +133,7 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 					Value: proto.String(strconv.Itoa(sched.tasksLaunched)),
 				}
 
-				stringArray := []string{*droneServerIP, "-token=1"}
+				stringArray := []string{"-addr=" + *droneServerIP, "-token=1"}
 				dataString := strings.Join(stringArray, " ")
 
 				task := &mesos.TaskInfo{
@@ -295,7 +295,7 @@ func parseIP(address string) net.IP {
 
 func getQueue(sched *ExampleScheduler)([]*queue.Work) {
 
-	uri := "http://54.72.35.4:8000/api/queue/get?token=1"
+	uri := "http://" + *droneServerIP "/api/queue/get?token=1"
 	response, err := http.Get(uri)
 	if err != nil {
 		panic(err)

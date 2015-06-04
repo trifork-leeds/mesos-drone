@@ -38,6 +38,8 @@ import (
 	util "github.com/mesos/mesos-go/mesosutil"
 	sched "github.com/mesos/mesos-go/scheduler"
 	"golang.org/x/net/context"
+	"github.com/drone/drone/pkg/queue"
+	"encoding/json"
 )
 
 const (
@@ -53,10 +55,10 @@ var (
 		fmt.Sprintf("Authentication provider to use, default is SASL that supports mechanisms: %+v", mech.ListSupported()))
 	master              = flag.String("master", "127.0.0.1:5050", "Master address <ip:port>")
 	executorPath        = flag.String("executor", "./example_executor", "Path to test executor")
-	taskCount           = flag.String("task-count", "5", "Total task count to run.")
 	mesosAuthPrincipal  = flag.String("mesos_authentication_principal", "", "Mesos authentication principal.")
 	mesosAuthSecretFile = flag.String("mesos_authentication_secret_file", "", "Mesos authentication secret file.")
-	droneConfigPath	= flag.String("config","drone-config.toml","location of the drone config.toml")
+	droneServerIP		= flag.String("droneip","-addr=127.0.0.1:80","IP address of the drone server")
+	launchedTasks = make(map[string](interface{}))
 )
 
 type ExampleScheduler struct {
@@ -67,15 +69,11 @@ type ExampleScheduler struct {
 }
 
 func newExampleScheduler(exec *mesos.ExecutorInfo) *ExampleScheduler {
-	total, err := strconv.Atoi(*taskCount)
-	if err != nil {
-		total = 5
-	}
+
 	return &ExampleScheduler{
 		executor:      exec,
 		tasksLaunched: 0,
 		tasksFinished: 0,
-		totalTasks:    total,
 	}
 }
 
@@ -112,36 +110,84 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 
 		remainingCpus := cpus
 		remainingMems := mems
-
 		var tasks []*mesos.TaskInfo
-		for sched.tasksLaunched < sched.totalTasks &&
-		CPUS_PER_TASK <= remainingCpus &&
-		MEM_PER_TASK <= remainingMems {
-
-			sched.tasksLaunched++
-
-			taskId := &mesos.TaskID{
-				Value: proto.String(strconv.Itoa(sched.tasksLaunched)),
-			}
-
-			task := &mesos.TaskInfo{
-				Name:     proto.String("go-task-" + taskId.GetValue()),
-				TaskId:   taskId,
-				SlaveId:  offer.SlaveId,
-				Executor: sched.executor,
-				Data: []byte("-addr=192.168.33.10:88 -token=1"),
-				Resources: []*mesos.Resource{
-					util.NewScalarResource("cpus", CPUS_PER_TASK),
-					util.NewScalarResource("mem", MEM_PER_TASK),
-				},
-			}
-
-			log.Infof("Prepared task: %s with offer %s for launch\n", task.GetName(), offer.Id.GetValue())
-
-			tasks = append(tasks, task)
-			remainingCpus -= CPUS_PER_TASK
-			remainingMems -= MEM_PER_TASK
+		queueItems := getQueue(sched)
+		if (len(queueItems) == 0){
+			fmt.Println("Queue is empty!")
 		}
+
+		for i, item := range queueItems {
+			if val, ok := launchedTasks[item.Commit.Sha]; ok{
+				fmt.Println("item exists: ", val)
+				continue
+			}
+
+			fmt.Println("Adding item: ", item.Commit.Sha)
+			launchedTasks[item.Commit.Sha] = item.Commit.Sha
+
+			if(CPUS_PER_TASK <= remainingCpus && MEM_PER_TASK <= remainingMems){
+
+				sched.tasksLaunched += i
+
+				taskId := &mesos.TaskID{
+					Value: proto.String(strconv.Itoa(sched.tasksLaunched)),
+				}
+
+				stringArray := []string{*droneServerIP, "-token=1"}
+				dataString := strings.Join(stringArray, " ")
+
+				task := &mesos.TaskInfo{
+					Name:     proto.String("go-task-" + taskId.GetValue()),
+					TaskId:   taskId,
+					SlaveId:  offer.SlaveId,
+					Executor: sched.executor,
+					Data: []byte(dataString),
+					Resources: []*mesos.Resource{
+						util.NewScalarResource("cpus", CPUS_PER_TASK),
+						util.NewScalarResource("mem", MEM_PER_TASK),
+					},
+				}
+
+				log.Infof("Prepared task: %s with offer %s for launch\n", task.GetName(), offer.Id.GetValue())
+
+				tasks = append(tasks, task)
+				remainingCpus -= CPUS_PER_TASK
+				remainingMems -= MEM_PER_TASK
+			}
+
+		}
+
+//		for sched.tasksLaunched < sched.totalTasks &&
+//		CPUS_PER_TASK <= remainingCpus &&
+//		MEM_PER_TASK <= remainingMems {
+//
+//			sched.tasksLaunched++
+//
+//			taskId := &mesos.TaskID{
+//				Value: proto.String(strconv.Itoa(sched.tasksLaunched)),
+//			}
+//
+//			stringArray := []string{*droneServerIP, "-token=1"}
+//			dataString := strings.Join(stringArray, " ")
+//
+//			task := &mesos.TaskInfo{
+//				Name:     proto.String("go-task-" + taskId.GetValue()),
+//				TaskId:   taskId,
+//				SlaveId:  offer.SlaveId,
+//				Executor: sched.executor,
+//				Data: []byte(dataString),
+//				Resources: []*mesos.Resource{
+//					util.NewScalarResource("cpus", CPUS_PER_TASK),
+//					util.NewScalarResource("mem", MEM_PER_TASK),
+//				},
+//			}
+//
+//			log.Infof("Prepared task: %s with offer %s for launch\n", task.GetName(), offer.Id.GetValue())
+//
+//			tasks = append(tasks, task)
+//			remainingCpus -= CPUS_PER_TASK
+//			remainingMems -= MEM_PER_TASK
+//		}
 		log.Infoln("Launching ", len(tasks), "tasks for offer", offer.Id.GetValue())
 		driver.LaunchTasks([]*mesos.OfferID{offer.Id}, tasks, &mesos.Filters{RefuseSeconds: proto.Float64(1)})
 	}
@@ -246,11 +292,37 @@ func parseIP(address string) net.IP {
 	return addr[0]
 }
 
+
+func getQueue(sched *ExampleScheduler)([]*queue.Work) {
+
+	uri := "http://54.72.35.4:8000/api/queue/get?token=1"
+	response, err := http.Get(uri)
+	if err != nil {
+		panic(err)
+	}
+	defer response.Body.Close()
+	var resp []*queue.Work
+	body, _ := ioutil.ReadAll(response.Body)
+	err = json.Unmarshal(body, &resp)
+	if err != nil {
+		panic(err)
+	}
+
+	for _, item := range resp {
+		if (item.Commit.State == "pending") {
+			sched.totalTasks++
+		}
+
+	}
+
+	return resp
+}
+
 // ----------------------- func main() ------------------------- //
 
 func main() {
 
-	cmd := exec.Command("/bin/sh", "-c","sudo /home/ubuntu/go/src/github.com/drone/drone/bin/drone --config=drone-config.toml &")
+	cmd := exec.Command("/bin/sh", "-c","drone --config=config.toml &")
 	err := cmd.Run()
 	if err != nil {
 		panic(err)

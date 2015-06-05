@@ -140,7 +140,7 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 					Value: proto.String(strconv.Itoa(sched.tasksLaunched)),
 				}
 
-				stringArray := []string{"-addr="+ *droneServerIP, "-token=1"}
+				stringArray := []string{"-addr=" + *droneServerIP, "-token=1"}
 				dataString := strings.Join(stringArray, " ")
 
 				task := &mesos.TaskInfo{
@@ -309,7 +309,8 @@ func parseIP(address string) net.IP {
 	@return an array of queue work
  */
 func getQueue(sched *ExampleScheduler)([]*queue.Work) {
-	uri := "http://"+ *droneServerIP +"/api/queue/get?token=1"
+
+	uri := "http://" + *droneServerIP + "/api/queue/get?token=1"
 	response, err := http.Get(uri)
 	if err != nil {
 		panic(err)
@@ -418,4 +419,5 @@ func main() {
 	if stat, err := driver.Run(); err != nil {
 		log.Infof("Framework stopped with status %s and error: %s\n", stat.String(), err.Error())
 	}
+
 }

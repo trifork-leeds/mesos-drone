@@ -12,5 +12,5 @@ go build -tags=drone-exec -o drone-executor executor/executor.go
 ```
 ## Running a scheduler on a master/slave
 ```
-sudo ./drone-scheduler -address="INTERNAL_IP_OF_CURRENT_MACHINE" -master="INTERNAL_MASTER_IP:5050" -v=1 -executor="ABSOLUTE_PATH_TO_EXECUTOR" -logtostderr=true -droneip="-addr=MASTER_IP:8000"
+sudo ./drone-scheduler -v=1 -executor="ABSOLUTE_PATH_TO_EXECUTOR" -logtostderr=true -droneip="DRONE_SERVER_IP:8000"
 ```

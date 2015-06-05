@@ -40,6 +40,7 @@ import (
 	"golang.org/x/net/context"
 	"github.com/drone/drone/pkg/queue"
 	"encoding/json"
+	"bytes"
 )
 
 const (
@@ -49,16 +50,20 @@ const (
 )
 
 var (
-	address      = flag.String("address", "127.0.0.1", "Binding address for artifact server")
+	//address      = flag.String("address", "127.0.0.1", "Binding address for artifact server")
 	artifactPort = flag.Int("artifactPort", defaultArtifactPort, "Binding port for artifact server")
 	authProvider = flag.String("mesos_authentication_provider", sasl.ProviderName,
 		fmt.Sprintf("Authentication provider to use, default is SASL that supports mechanisms: %+v", mech.ListSupported()))
-	master              = flag.String("master", "127.0.0.1:5050", "Master address <ip:port>")
+	//master              = flag.String("master", "127.0.0.1:5050", "Master address <ip:port>")
 	executorPath        = flag.String("executor", "./example_executor", "Path to test executor")
 	mesosAuthPrincipal  = flag.String("mesos_authentication_principal", "", "Mesos authentication principal.")
 	mesosAuthSecretFile = flag.String("mesos_authentication_secret_file", "", "Mesos authentication secret file.")
-	droneServerIP		= flag.String("droneip","-addr=127.0.0.1:80","IP address of the drone server")
+	droneServerIP		= flag.String("droneip","127.0.0.1:80","IP address of the drone server")
+
+	//used to keep a track of launched items in the queue
 	launchedTasks = make(map[string](interface{}))
+	master string
+	address string
 )
 
 type ExampleScheduler struct {
@@ -116,6 +121,8 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 			fmt.Println("Queue is empty!")
 		}
 
+		// start a task of each item in the queue. before starting, check
+		// if it has not already been launched.
 		for i, item := range queueItems {
 			if val, ok := launchedTasks[item.Commit.Sha]; ok{
 				fmt.Println("item exists: ", val)
@@ -133,7 +140,7 @@ func (sched *ExampleScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 					Value: proto.String(strconv.Itoa(sched.tasksLaunched)),
 				}
 
-				stringArray := []string{*droneServerIP, "-token=1"}
+				stringArray := []string{"-addr="+ *droneServerIP, "-token=1"}
 				dataString := strings.Join(stringArray, " ")
 
 				task := &mesos.TaskInfo{
@@ -233,6 +240,8 @@ func (sched *ExampleScheduler) Error(driver sched.SchedulerDriver, err string) {
 func init() {
 	flag.Parse()
 	log.Infoln("Initializing the Example Scheduler...")
+	master = strings.TrimSpace(getMasterIP())
+	address = strings.Split(master,":")[0]
 }
 
 // returns (downloadURI, basename(path))
@@ -253,7 +262,7 @@ func serveExecutorArtifact(path string) (*string, string) {
 	}
 	serveFile("/"+base, path)
 
-	hostURI := fmt.Sprintf("http://%s:%d/%s", *address, *artifactPort, base)
+	hostURI := fmt.Sprintf("http://%s:%d/%s", address, *artifactPort, base)
 	log.V(2).Infof("Hosting artifact '%s' at '%s'", path, hostURI)
 
 	return &hostURI, base
@@ -266,7 +275,7 @@ func prepareExecutorInfo() *mesos.ExecutorInfo {
 
 	executorCommand := fmt.Sprintf("./%s", executorCmd)
 
-	go http.ListenAndServe(fmt.Sprintf("%s:%d", *address, *artifactPort), nil)
+	go http.ListenAndServe(fmt.Sprintf("%s:%d", address, *artifactPort), nil)
 	log.V(2).Info("Serving executor artifacts...")
 
 	// Create mesos scheduler driver.
@@ -292,10 +301,15 @@ func parseIP(address string) net.IP {
 	return addr[0]
 }
 
-
+/**
+	Queries drone server to get queue of drone tasks.
+	Counts the number of pending commits and pass them to the
+	given scheduler as the total number  of tasks to be executed.
+	@param Scheduler the scheduler to pass number of pending commits
+	@return an array of queue work
+ */
 func getQueue(sched *ExampleScheduler)([]*queue.Work) {
-
-	uri := "http://54.72.35.4:8000/api/queue/get?token=1"
+	uri := "http://"+ *droneServerIP +"/api/queue/get?token=1"
 	response, err := http.Get(uri)
 	if err != nil {
 		panic(err)
@@ -318,22 +332,51 @@ func getQueue(sched *ExampleScheduler)([]*queue.Work) {
 	return resp
 }
 
-// ----------------------- func main() ------------------------- //
+/**
+	Uses mesos cli to query zookeeper to resolve master ip.
+	@return string master ip including port number
+ */
+func getMasterIP()string{
 
-func main() {
+	cmd := exec.Command("/bin/bash", "-c","mesos-resolve $(cat /etc/mesos/zk) 2>/dev/null")
+	cmdOutput := &bytes.Buffer{}
+	cmd.Stdout = cmdOutput
+	err := cmd.Run()
+	if err != nil{
+		panic(err.Error())
+	}
+
+	if(len(string(cmdOutput.Bytes())) < 1){
+		log.Fatal("Couldn't solve master ip.")
+	}
+	return string(cmdOutput.Bytes())
+}
+
+/**
+	Starts Drone server on a background process.
+ */
+func startDrone(){
 
 	cmd := exec.Command("/bin/sh", "-c","drone --config=config.toml &")
 	err := cmd.Run()
 	if err != nil {
 		panic(err)
 	}
+}
+
+// ----------------------- func main() ------------------------- //
+
+func main() {
+
+	startDrone()
+
 	// build command executor
 	exec := prepareExecutorInfo()
 
 	// the framework
 	fwinfo := &mesos.FrameworkInfo{
 		User: proto.String(""), // Mesos-go will fill in user.
-		Name: proto.String("Test Framework (Go)"),
+		Name: proto.String("Drone Framework"),
 	}
 
 	cred := (*mesos.Credential)(nil)
@@ -349,11 +392,14 @@ func main() {
 		}
 	}
 
-	bindingAddress := parseIP(*address)
+	fmt.Println("Address: ",address)
+	fmt.Println("Master: ",master)
+	bindingAddress := parseIP(address)
+	fmt.Println("bindingAddress: ",bindingAddress)
 	config := sched.DriverConfig{
 		Scheduler:      newExampleScheduler(exec),
 		Framework:      fwinfo,
-		Master:         *master,
+		Master:         master,
 		Credential:     cred,
 		BindingAddress: bindingAddress,
 		WithAuthContext: func(ctx context.Context) context.Context {
@@ -362,6 +408,7 @@ func main() {
 			return ctx
 		},
 	}
+
 	driver, err := sched.NewMesosSchedulerDriver(config)
 
 	if err != nil {
@@ -371,5 +418,4 @@ func main() {
 	if stat, err := driver.Run(); err != nil {
 		log.Infof("Framework stopped with status %s and error: %s\n", stat.String(), err.Error())
 	}
-
 }
